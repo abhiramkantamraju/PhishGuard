@@ -1,6 +1,6 @@
 # PhishGuard
 Repository for the Project PhishGuard
 
-## projectdescription
+## Project Description
 Webpage to detect phishing emails and suspicious urls 
 
