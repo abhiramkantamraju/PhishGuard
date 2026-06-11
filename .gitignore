@@ -9,6 +9,8 @@
 *.log
 *.log.*
 *.sig
+*.db
+__pycache__/
 
 pkg/
 
