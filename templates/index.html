@@ -1,0 +1,113 @@
+ 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishGuard</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f7fb;
+            color: #1f2937;
+        }
+
+        main {
+            max-width: 820px;
+            margin: 48px auto;
+            padding: 0 20px;
+        }
+
+        .panel {
+            background: #ffffff;
+            border: 1px solid #d8e0ea;
+            border-radius: 8px;
+            padding: 28px;
+            box-shadow: 0 8px 24px rgba(30, 41, 59, 0.08);
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            color: #0f172a;
+        }
+
+        nav {
+            margin-bottom: 18px;
+        }
+
+        a {
+            color: #155e75;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        p {
+            line-height: 1.5;
+        }
+
+        label {
+            display: block;
+            margin: 24px 0 8px;
+            font-weight: 700;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 240px;
+            box-sizing: border-box;
+            padding: 14px;
+            border: 1px solid #b8c4d4;
+            border-radius: 6px;
+            font: inherit;
+            resize: vertical;
+        }
+
+        button {
+            margin-top: 16px;
+            padding: 12px 18px;
+            border: 0;
+            border-radius: 6px;
+            background: #155e75;
+            color: #ffffff;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0e7490;
+        }
+
+        .error {
+            margin-top: 16px;
+            color: #b91c1c;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <section class="panel">
+            <nav>
+                <a href="/history">View scan history</a>
+            </nav>
+            <h1>PhishGuard</h1>
+            <p>Paste an email message below to check it for common phishing warning signs.</p>
+
+            {% if error %}
+                <p class="error">{{ error }}</p>
+            {% endif %}
+
+            <form method="post">
+                <label for="email_text">Email text</label>
+                <textarea id="email_text" name="email_text" placeholder="Paste the email content here...">{{ email_text or "" }}</textarea>
+                <button type="submit">Analyze Email</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

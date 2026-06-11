@@ -1,0 +1,119 @@
+import sqlite3
+from datetime import datetime
+
+from flask import Flask, redirect, render_template, request, url_for
+
+from detector import analyze_text, get_risk_level
+
+
+app = Flask(__name__)
+DATABASE = "phishguard.db"
+
+
+def get_db_connection():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = get_db_connection()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS scans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_text TEXT NOT NULL,
+            flags TEXT NOT NULL,
+            score INTEGER NOT NULL,
+            risk_level TEXT NOT NULL,
+            note TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        email_text = request.form.get("email_text", "").strip()
+
+        if not email_text:
+            return render_template(
+                "index.html",
+                error="Please paste an email message before checking it.",
+                email_text=email_text,
+            )
+
+        flags, score = analyze_text(email_text)
+        risk_level = get_risk_level(score)
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        conn = get_db_connection()
+        cursor = conn.execute(
+            """
+            INSERT INTO scans (email_text, flags, score, risk_level, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (email_text, "\n".join(flags), score, risk_level, created_at),
+        )
+        conn.commit()
+        scan_id = cursor.lastrowid
+        conn.close()
+
+        return render_template(
+            "result.html",
+            scan_id=scan_id,
+            email_text=email_text,
+            flags=flags,
+            score=score,
+            risk_level=risk_level,
+        )
+
+    return render_template("index.html")
+
+
+@app.route("/history")
+def history():
+    conn = get_db_connection()
+    scans = conn.execute("SELECT * FROM scans ORDER BY id DESC").fetchall()
+    conn.close()
+
+    return render_template("history.html", scans=scans)
+
+
+@app.route("/history/<int:scan_id>/edit", methods=["GET", "POST"])
+def edit_scan(scan_id):
+    conn = get_db_connection()
+    scan = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
+
+    if scan is None:
+        conn.close()
+        return redirect(url_for("history"))
+
+    if request.method == "POST":
+        note = request.form.get("note", "").strip()
+        conn.execute("UPDATE scans SET note = ? WHERE id = ?", (note, scan_id))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("history"))
+
+    conn.close()
+    return render_template("edit_scan.html", scan=scan)
+
+
+@app.route("/history/<int:scan_id>/delete", methods=["POST"])
+def delete_scan(scan_id):
+    conn = get_db_connection()
+    conn.execute("DELETE FROM scans WHERE id = ?", (scan_id,))
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("history"))
+
+
+if __name__ == "__main__":
+    init_db()
+    app.run(debug=True)
