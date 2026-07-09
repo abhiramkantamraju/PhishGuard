@@ -137,6 +137,7 @@
                                     <div class="actions">
                                         <a href="/history/{{ scan["id"] }}/edit">Edit note</a>
                                         <form method="post" action="/history/{{ scan["id"] }}/delete">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit">Delete</button>
                                         </form>
                                     </div>

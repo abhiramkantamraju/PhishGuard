@@ -1,13 +1,20 @@
+import os
+import secrets
 import sqlite3
 from datetime import datetime
 
 from flask import Flask, redirect, render_template, request, url_for
+from flask_wtf import CSRFProtect
 
 from detector import analyze_text, get_risk_level
 
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+csrf = CSRFProtect(app)
+
 DATABASE = "phishguard.db"
+MAX_EMAIL_LENGTH = 20000
 
 
 def get_db_connection():
@@ -44,6 +51,13 @@ def index():
             return render_template(
                 "index.html",
                 error="Please paste an email message before checking it.",
+                email_text=email_text,
+            )
+
+        if len(email_text) > MAX_EMAIL_LENGTH:
+            return render_template(
+                "index.html",
+                error=f"Email text is too long (max {MAX_EMAIL_LENGTH} characters).",
                 email_text=email_text,
             )
 
@@ -116,4 +130,5 @@ def delete_scan(scan_id):
 
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True)
+    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(debug=debug_mode)

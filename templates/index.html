@@ -103,6 +103,7 @@
             {% endif %}
 
             <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label for="email_text">Email text</label>
                 <textarea id="email_text" name="email_text" placeholder="Paste the email content here...">{{ email_text or "" }}</textarea>
                 <button type="submit">Analyze Email</button>
