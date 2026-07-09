@@ -11,6 +11,7 @@
 *.sig
 *.db
 __pycache__/
+.pytest_cache/
 
 pkg/
 

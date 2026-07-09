@@ -87,6 +87,7 @@
             <pre>{{ scan["email_text"] }}</pre>
 
             <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label for="note">Note</label>
                 <textarea id="note" name="note" placeholder="Add your note here...">{{ scan["note"] or "" }}</textarea>
                 <button type="submit">Save note</button>
