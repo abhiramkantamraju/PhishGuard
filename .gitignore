@@ -12,6 +12,8 @@
 *.db
 __pycache__/
 .pytest_cache/
+data/
+venv/
+*.pyc
 
 pkg/
-

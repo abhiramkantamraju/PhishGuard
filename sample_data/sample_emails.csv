@@ -1,0 +1,7 @@
+label,email_text
+phishing,"Urgent action required. Your account will be suspended unless you verify your account immediately at http://paypa1.com/login"
+phishing,"Unusual activity detected. Confirm your password now using http://bit.ly/secure-check"
+phishing,"Your account will be terminated. Enter your credit card details at http://192.168.1.1/payment"
+legitimate,"Hi Alex, can we move our project meeting to tomorrow afternoon?"
+legitimate,"Your package has shipped. Track it from your official account dashboard."
+legitimate,"Reminder: the lecture slides are now available in the course portal."
