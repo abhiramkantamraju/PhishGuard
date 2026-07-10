@@ -6,7 +6,7 @@ from datetime import datetime
 from flask import Flask, redirect, render_template, request, url_for
 from flask_wtf import CSRFProtect
 
-from detector import analyze_text, get_risk_level
+from detector import analyze_text, analyze_urls_network, extract_urls, get_risk_level
 
 
 app = Flask(__name__)
@@ -15,6 +15,7 @@ csrf = CSRFProtect(app)
 
 DATABASE = "phishguard.db"
 MAX_EMAIL_LENGTH = 20000
+SAFE_BROWSING_API_KEY = os.environ.get("SAFE_BROWSING_API_KEY")
 
 
 def get_db_connection():
@@ -62,6 +63,13 @@ def index():
             )
 
         flags, score = analyze_text(email_text)
+
+        network_flags, network_score = analyze_urls_network(
+            extract_urls(email_text), api_key=SAFE_BROWSING_API_KEY
+        )
+        flags += network_flags
+        score += network_score
+
         risk_level = get_risk_level(score)
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
