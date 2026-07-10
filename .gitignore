@@ -16,5 +16,10 @@ data/
 venv/
 *.pyc
 CLAUDE.md
+.env
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
 
 pkg/
