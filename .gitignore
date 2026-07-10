@@ -15,5 +15,6 @@ __pycache__/
 data/
 venv/
 *.pyc
+CLAUDE.md
 
 pkg/
