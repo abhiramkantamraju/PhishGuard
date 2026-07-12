@@ -1,99 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Scan Note</title>
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: #f4f7fb;
-            color: #1f2937;
-        }
+{% extends "base.html" %}
 
-        main {
-            max-width: 820px;
-            margin: 48px auto;
-            padding: 0 20px;
-        }
+{% block title %}Edit Scan Note{% endblock %}
 
-        .panel {
-            background: #ffffff;
-            border: 1px solid #d8e0ea;
-            border-radius: 8px;
-            padding: 28px;
-            box-shadow: 0 8px 24px rgba(30, 41, 59, 0.08);
-        }
+{% block content %}
+    <h1>Edit Scan Note</h1>
+    <p>Risk level: {{ scan["risk_level"] }} | Score: {{ scan["score"] }}</p>
 
-        h1, h2 {
-            color: #0f172a;
-        }
+    <h2>Saved email</h2>
+    <pre>{{ scan["email_text"] }}</pre>
 
-        label {
-            display: block;
-            margin: 18px 0 8px;
-            font-weight: 700;
-        }
-
-        textarea {
-            width: 100%;
-            min-height: 120px;
-            box-sizing: border-box;
-            padding: 14px;
-            border: 1px solid #b8c4d4;
-            border-radius: 6px;
-            font: inherit;
-            resize: vertical;
-        }
-
-        pre {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            background: #f8fafc;
-            border: 1px solid #d8e0ea;
-            border-radius: 6px;
-            padding: 16px;
-            line-height: 1.5;
-        }
-
-        button {
-            margin-top: 16px;
-            padding: 12px 18px;
-            border: 0;
-            border-radius: 6px;
-            background: #155e75;
-            color: #ffffff;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        a {
-            display: inline-block;
-            margin-left: 14px;
-            color: #155e75;
-            font-weight: 700;
-            text-decoration: none;
-        }
-    </style>
-</head>
-<body>
-    <main>
-        <section class="panel">
-            <h1>Edit Scan Note</h1>
-            <p>Risk level: {{ scan["risk_level"] }} | Score: {{ scan["score"] }}</p>
-
-            <h2>Saved email</h2>
-            <pre>{{ scan["email_text"] }}</pre>
-
-            <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <label for="note">Note</label>
-                <textarea id="note" name="note" placeholder="Add your note here...">{{ scan["note"] or "" }}</textarea>
-                <button type="submit">Save note</button>
-                <a href="/history">Cancel</a>
-            </form>
-        </section>
-    </main>
-</body>
-</html>
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="note">Note</label>
+        <textarea id="note" name="note" placeholder="Add your note here...">{{ scan["note"] or "" }}</textarea>
+        <button type="submit">Save note</button>
+        <a href="/history">Cancel</a>
+    </form>
+{% endblock %}
