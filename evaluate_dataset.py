@@ -1,9 +1,13 @@
 import argparse
 import csv
+import sys
 from pathlib import Path
 
 from detector import analyze_text, get_risk_level
 
+# Real-world email bodies can exceed the csv module's default 128KB field
+# size limit; raise it (capped to what the platform's C long supports).
+csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 
 PHISHING_LEVELS = {"Suspicious", "Dangerous"}
 
@@ -59,6 +63,7 @@ def read_rows(path):
 def evaluate_dataset(path, show_rows=True):
     total = 0
     correct = 0
+    true_positive = 0
     false_positive = 0
     false_negative = 0
 
@@ -70,6 +75,8 @@ def evaluate_dataset(path, show_rows=True):
         total += 1
         if predicted == actual:
             correct += 1
+            if predicted == "phishing":
+                true_positive += 1
         elif predicted == "phishing" and actual == "legitimate":
             false_positive += 1
         elif predicted == "legitimate" and actual == "phishing":
@@ -84,6 +91,18 @@ def evaluate_dataset(path, show_rows=True):
     accuracy = correct / total if total else 0
     false_positive_rate = false_positive / total if total else 0
     false_negative_rate = false_negative / total if total else 0
+    precision = (
+        true_positive / (true_positive + false_positive)
+        if (true_positive + false_positive) else 0
+    )
+    recall = (
+        true_positive / (true_positive + false_negative)
+        if (true_positive + false_negative) else 0
+    )
+    f1_score = (
+        2 * precision * recall / (precision + recall)
+        if (precision + recall) else 0
+    )
 
     return {
         "total": total,
@@ -93,6 +112,9 @@ def evaluate_dataset(path, show_rows=True):
         "false_positive_rate": false_positive_rate,
         "false_negative": false_negative,
         "false_negative_rate": false_negative_rate,
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1_score,
     }
 
 
@@ -110,6 +132,9 @@ def main():
     print(f"Accuracy: {results['accuracy']:.2%}")
     print(f"False positives: {results['false_positive']} ({results['false_positive_rate']:.2%})")
     print(f"False negatives: {results['false_negative']} ({results['false_negative_rate']:.2%})")
+    print(f"Precision: {results['precision']:.2%}")
+    print(f"Recall: {results['recall']:.2%}")
+    print(f"F1 score: {results['f1_score']:.2%}")
 
 
 if __name__ == "__main__":

@@ -68,6 +68,21 @@ class TestDomainSpoofing:
     def test_unrelated_domain_is_not_flagged(self):
         assert check_domain_spoofing("https://example.com") == []
 
+    def test_cyrillic_homograph_is_flagged(self):
+        # "а" is Cyrillic 'а', not Latin 'a' - visually identical.
+        flags = check_domain_spoofing("http://pаypal.com/login")
+        assert any("homograph" in flag for flag in flags)
+        assert any("misspelled" in flag for flag in flags)
+
+    def test_punycode_domain_is_flagged(self):
+        flags = check_domain_spoofing("http://xn--pple-43d.com")
+        assert any("punycode" in flag for flag in flags)
+
+    def test_plain_ascii_domain_has_no_homograph_flag(self):
+        flags = check_domain_spoofing("https://example.com")
+        assert not any("homograph" in flag for flag in flags)
+        assert not any("punycode" in flag for flag in flags)
+
 
 class TestAnalyzeText:
     def test_benign_email_has_no_flags(self):
@@ -80,6 +95,16 @@ class TestAnalyzeText:
         assert score > 0
         assert any("Urgent language" in flag for flag in flags)
 
+    def test_generic_administrative_language_is_not_flagged(self):
+        # "immediately"/"important notice"/"action required" were removed
+        # from URGENT_KEYWORDS: they fired on ordinary legitimate email with
+        # no phishing-specific signal (see README's realistic-dataset section).
+        flags, score = analyze_text(
+            "Important notice: our office will be closed for the holidays. "
+            "No action required, this change is effective immediately."
+        )
+        assert score == 0
+
     def test_personal_info_request_is_flagged(self):
         flags, score = analyze_text("Please confirm your password to continue.")
         assert any("personal information" in flag for flag in flags)
@@ -91,6 +116,15 @@ class TestAnalyzeText:
     def test_shortened_url_is_flagged(self):
         flags, score = analyze_text("Check this out: http://bit.ly/abc123")
         assert any("Shortened URL" in flag for flag in flags)
+
+    def test_risky_attachment_mention_is_flagged(self):
+        flags, score = analyze_text("Please see the attached invoice-2024.exe for details.")
+        assert score > 0
+        assert any("risky attachment" in flag for flag in flags)
+
+    def test_com_extension_is_not_flagged_as_attachment(self):
+        flags, score = analyze_text("Visit example.com for more information.")
+        assert not any("risky attachment" in flag for flag in flags)
 
     def test_combined_signals_increase_score(self):
         text = (
@@ -110,6 +144,28 @@ class TestAnalyzeText:
         flags, score = analyze_text("Dear user, your email password expires today. Reset now.")
         assert score > 0
         assert any("Urgent language" in flag for flag in flags)
+
+    def test_advance_fee_scam_language_is_flagged(self):
+        text = (
+            "Dear friend, I am the next of kin to a dormant account holding a "
+            "large sum of money. Please assist me to transfer these funds."
+        )
+        flags, score = analyze_text(text)
+        assert score > 0
+        assert any("Advance-fee scam" in flag for flag in flags)
+
+    def test_account_validation_phrasing_is_flagged(self):
+        flags, score = analyze_text(
+            "Security alert: please validate your account by clicking the link below."
+        )
+        assert score > 0
+        assert any("personal information" in flag for flag in flags)
+
+    def test_links_alone_are_not_scored(self):
+        flags, score = analyze_text("See the agenda here: http://example.com/agenda")
+        assert score == 0
+        assert any("link" in flag for flag in flags)
+        assert any("HTTP" in flag for flag in flags)
 
 
 class FakeResponse:
