@@ -1,127 +1,73 @@
- 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PhishGuard Result</title>
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: #f4f7fb;
-            color: #1f2937;
-        }
+{% extends "base.html" %}
 
-        main {
-            max-width: 900px;
-            margin: 48px auto;
-            padding: 0 20px;
-        }
+{% block title %}PhishGuard Result{% endblock %}
 
-        .panel {
-            background: #ffffff;
-            border: 1px solid #d8e0ea;
-            border-radius: 8px;
-            padding: 28px;
-            box-shadow: 0 8px 24px rgba(30, 41, 59, 0.08);
-        }
+{% block content %}
+    <h1>Analysis Result</h1>
 
-        h1, h2 {
-            color: #0f172a;
-        }
+    <p>
+        Risk level:
+        <span id="risk-badge" class="risk {{ risk_level | lower }}">{{ risk_level }}</span>
+    </p>
+    <p>Risk score: <span id="risk-score">{{ score }}</span></p>
 
-        .actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-top: 18px;
-        }
+    <h2>Warning signs found</h2>
+    <ul id="flags-list">
+        {% for flag in flags %}
+            <li>{{ flag }}</li>
+        {% endfor %}
+    </ul>
+    <p id="no-flags-message" {% if flags %}style="display:none;"{% endif %}>
+        No common phishing warning signs were detected by the current rules.
+    </p>
 
-        .risk {
-            display: inline-block;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-weight: 700;
-        }
+    {% if check_links %}
+        <p id="network-check-status" class="network-status">Checking links against Google Safe Browsing and domain age…</p>
+    {% endif %}
 
-        .safe {
-            background: #dcfce7;
-            color: #166534;
-        }
+    <h2>Checked email</h2>
+    <pre>{{ email_text }}</pre>
 
-        .suspicious {
-            background: #fef3c7;
-            color: #92400e;
-        }
+    <div class="actions">
+        <a href="/">Check another email</a>
+        <a href="/history">View scan history</a>
+        <a href="/history/{{ scan_id }}/edit">Add note to this scan</a>
+    </div>
 
-        .dangerous {
-            background: #fee2e2;
-            color: #991b1b;
-        }
+    {% if check_links %}
+        <script>
+            (function () {
+                var statusEl = document.getElementById("network-check-status");
+                var flagsList = document.getElementById("flags-list");
+                var noFlagsMessage = document.getElementById("no-flags-message");
+                var riskBadge = document.getElementById("risk-badge");
+                var riskScore = document.getElementById("risk-score");
 
-        ul {
-            padding-left: 22px;
-        }
-
-        li {
-            margin: 8px 0;
-        }
-
-        pre {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            background: #f8fafc;
-            border: 1px solid #d8e0ea;
-            border-radius: 6px;
-            padding: 16px;
-            line-height: 1.5;
-        }
-
-        a {
-            display: inline-block;
-            margin-top: 18px;
-            color: #155e75;
-            font-weight: 700;
-            text-decoration: none;
-        }
-
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <main>
-        <section class="panel">
-            <h1>Analysis Result</h1>
-
-            <p>
-                Risk level:
-                <span class="risk {{ risk_level | lower }}">{{ risk_level }}</span>
-            </p>
-            <p>Risk score: {{ score }}</p>
-
-            <h2>Warning signs found</h2>
-            {% if flags %}
-                <ul>
-                    {% for flag in flags %}
-                        <li>{{ flag }}</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>No common phishing warning signs were detected by the current rules.</p>
-            {% endif %}
-
-            <h2>Checked email</h2>
-            <pre>{{ email_text }}</pre>
-
-            <div class="actions">
-                <a href="/">Check another email</a>
-                <a href="/history">View scan history</a>
-                <a href="/history/{{ scan_id }}/edit">Add note to this scan</a>
-            </div>
-        </section>
-    </main>
-</body>
-</html>
+                fetch("/history/{{ scan_id }}/network-check", {
+                    method: "POST",
+                    headers: { "X-CSRFToken": "{{ csrf_token() }}" },
+                })
+                    .then(function (response) { return response.json(); })
+                    .then(function (data) {
+                        if (data.flags && data.flags.length > 0) {
+                            data.flags.forEach(function (flag) {
+                                var li = document.createElement("li");
+                                li.textContent = flag;
+                                flagsList.appendChild(li);
+                            });
+                            noFlagsMessage.style.display = "none";
+                            riskBadge.textContent = data.risk_level;
+                            riskBadge.className = "risk " + data.risk_level.toLowerCase();
+                            riskScore.textContent = data.score;
+                            statusEl.textContent = "Link checks complete — additional warning signs found above.";
+                        } else {
+                            statusEl.textContent = "Link checks complete — no additional issues found.";
+                        }
+                    })
+                    .catch(function () {
+                        statusEl.textContent = "Link checks could not be completed (network unavailable).";
+                    });
+            })();
+        </script>
+    {% endif %}
+{% endblock %}

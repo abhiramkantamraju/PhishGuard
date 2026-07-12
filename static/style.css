@@ -1,0 +1,183 @@
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f4f7fb;
+    color: #1f2937;
+}
+
+main {
+    max-width: 900px;
+    margin: 48px auto;
+    padding: 0 20px;
+}
+
+.panel {
+    background: #ffffff;
+    border: 1px solid #d8e0ea;
+    border-radius: 8px;
+    padding: 28px;
+    box-shadow: 0 8px 24px rgba(30, 41, 59, 0.08);
+}
+
+h1, h2 {
+    color: #0f172a;
+    margin-top: 0;
+}
+
+nav {
+    margin-bottom: 18px;
+}
+
+p {
+    line-height: 1.5;
+}
+
+a {
+    color: #155e75;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+label {
+    display: block;
+    margin: 24px 0 8px;
+    font-weight: 700;
+}
+
+textarea {
+    width: 100%;
+    min-height: 240px;
+    box-sizing: border-box;
+    padding: 14px;
+    border: 1px solid #b8c4d4;
+    border-radius: 6px;
+    font: inherit;
+    resize: vertical;
+}
+
+#note {
+    min-height: 120px;
+}
+
+form a {
+    display: inline-block;
+    margin-left: 14px;
+}
+
+button {
+    margin-top: 16px;
+    padding: 12px 18px;
+    border: 0;
+    border-radius: 6px;
+    background: #155e75;
+    color: #ffffff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0e7490;
+}
+
+.error {
+    margin-top: 16px;
+    color: #b91c1c;
+    font-weight: 700;
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 18px;
+}
+
+.risk {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+.safe {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.suspicious {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.dangerous {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+ul {
+    padding-left: 22px;
+}
+
+li {
+    margin: 8px 0;
+}
+
+pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: #f8fafc;
+    border: 1px solid #d8e0ea;
+    border-radius: 6px;
+    padding: 16px;
+    line-height: 1.5;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    border-bottom: 1px solid #d8e0ea;
+    padding: 12px;
+    text-align: left;
+    vertical-align: top;
+}
+
+th {
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+.preview {
+    max-width: 340px;
+}
+
+td button {
+    margin-top: 0;
+    border: 0;
+    background: transparent;
+    color: #155e75;
+    padding: 0;
+    font-weight: 700;
+}
+
+td button:hover {
+    background: transparent;
+    text-decoration: underline;
+}
+
+.empty {
+    margin-top: 20px;
+    color: #475569;
+}
+
+.network-status {
+    color: #475569;
+    font-style: italic;
+}
