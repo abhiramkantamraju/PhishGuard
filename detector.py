@@ -6,10 +6,20 @@ from urllib.parse import urlparse
 import requests
 
 # --- Phishing keywords that trigger red flags ---
+#
+# "immediately", "important notice", and "action required" were removed
+# after real-world testing (see README's realistic-dataset section) showed
+# they fire constantly on ordinary legitimate email — "no action required",
+# "effective immediately", administrative notices — with no phishing-specific
+# signal on their own. "act now"/"urgent"/"limited time" are kept even though
+# they also appear in legitimate marketing copy, since removing them would
+# blind the detector to genuine urgency-based phishing entirely; this
+# precision/recall tradeoff is inherent to keyword matching and documented
+# as a known limitation, not something fixable by list-tuning alone.
 URGENT_KEYWORDS = [
-    "act now", "urgent", "immediately", "your account will be closed",
+    "act now", "urgent", "your account will be closed",
     "verify your account", "confirm your details", "click here now",
-    "limited time", "expires soon", "action required", "important notice",
+    "limited time", "expires soon",
     "password expires", "your password will expire", "account will expire",
     "expires today"
 ]
@@ -24,7 +34,11 @@ PERSONAL_INFO_KEYWORDS = [
     "enter your password", "confirm your password", "enter your credit card",
     "bank account details", "social security", "date of birth",
     "enter your pin", "verify your identity", "verify your account",
-    "confirm your details", "login details", "account password"
+    "confirm your details", "login details", "account password",
+    "validate your account", "account validation", "unusual sign-in activity",
+    "update your account information", "restore your account",
+    "verify your email address", "your mailbox is almost full",
+    "security alert"
 ]
 
 THREAT_KEYWORDS = [
@@ -32,6 +46,28 @@ THREAT_KEYWORDS = [
     "unauthorized access", "your account will be terminated",
     "failure to respond", "legal action", "you have been selected"
 ]
+
+# Advance-fee ("419") scam phrasing - a distinct, well-established phishing
+# category. Each phrase below was checked against a real legitimate business
+# email corpus (Enron) and kept only if it essentially never appears there,
+# to avoid trading recall for new false positives.
+ADVANCE_FEE_SCAM_KEYWORDS = [
+    "next of kin", "beneficiary", "dear friend", "foreign partner",
+    "strictly confidential", "assist me", "bank account number",
+    "dormant account", "my late father", "my late husband",
+    "contact me immediately", "security company", "sum of"
+]
+
+# ".com" is deliberately excluded: it's a common TLD (e.g. "example.com"
+# mentioned in body text), which would otherwise false-positive constantly.
+RISKY_ATTACHMENT_EXTENSIONS = [
+    "exe", "scr", "bat", "cmd", "pif", "vbs", "jar",
+    "msi", "zip", "rar", "7z", "docm", "xlsm", "pptm", "iso",
+]
+ATTACHMENT_MENTION_PATTERN = re.compile(
+    r"\b[\w-]+\.(?:" + "|".join(RISKY_ATTACHMENT_EXTENSIONS) + r")\b",
+    re.IGNORECASE,
+)
 
 URL_PATTERN = r"https?://[^\s<>\"]+|www\.[^\s<>\"]+"
 IP_URL_PATTERN = r"https?://(?:\d{1,3}\.){3}\d{1,3}"
@@ -81,6 +117,32 @@ def normalize_lookalikes(value):
     return value.translate(replacements)
 
 
+# Unicode characters from other scripts that are visually near-identical to
+# Latin letters (a "homograph" attack) — e.g. Cyrillic 'а' (U+0430) vs Latin
+# 'a' (U+0061). Not exhaustive, but covers the characters attackers use most
+# since they map onto the whole Latin alphabet by themselves.
+CONFUSABLE_CHARS = {
+    # Cyrillic
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x",
+    "і": "i", "ѕ": "s", "һ": "h", "ԁ": "d", "ѡ": "w", "ј": "j", "ᴠ": "v",
+    "ⅰ": "i", "ⅼ": "l",
+    # Greek
+    "α": "a", "ο": "o", "ρ": "p", "ν": "v", "υ": "u", "κ": "k", "ѵ": "v",
+}
+
+
+def normalize_confusables(value):
+    return "".join(CONFUSABLE_CHARS.get(char, char) for char in value)
+
+
+def is_punycode(hostname):
+    return any(label.startswith("xn--") for label in hostname.split("."))
+
+
+def has_confusable_characters(value):
+    return any(char in CONFUSABLE_CHARS for char in value)
+
+
 def levenshtein_distance(left, right):
     if left == right:
         return 0
@@ -107,8 +169,21 @@ def check_domain_spoofing(url):
     hostname = get_hostname(url)
     root_domain = get_root_domain(hostname)
     domain_name = root_domain.split(".")[0]
-    normalized_domain_name = normalize_lookalikes(domain_name)
+    normalized_domain_name = normalize_lookalikes(normalize_confusables(domain_name))
     flags = []
+
+    if is_punycode(hostname):
+        flags.append(
+            f"Domain '{hostname}' uses punycode (internationalized domain encoding), "
+            "which can be used to visually spoof a trusted domain"
+        )
+
+    if has_confusable_characters(domain_name):
+        flags.append(
+            f"Domain '{root_domain}' contains non-Latin characters that closely resemble "
+            "Latin letters (e.g. Cyrillic 'а' instead of 'a'), a homograph technique used "
+            "to impersonate trusted domains"
+        )
 
     for brand in LEGITIMATE_BRAND_DOMAINS:
         if is_legitimate_brand_domain(hostname, brand):
@@ -170,10 +245,26 @@ def analyze_text(email_text):
             score += 3
             break
 
+    # Check advance-fee ("419") scam language.
+    for keyword in ADVANCE_FEE_SCAM_KEYWORDS:
+        if keyword in text:
+            flags.append(f"Advance-fee scam language detected: '{keyword}'")
+            score += 2
+            break
+
+    attachment_match = ATTACHMENT_MENTION_PATTERN.search(email_text)
+    if attachment_match:
+        flags.append(
+            f"Mentions a risky attachment type: '{attachment_match.group(0)}'"
+        )
+        score += 3
+
     urls = extract_urls(email_text)
     if urls:
+        # Informational only, not scored: links are near-universal in real
+        # email (mailing lists, newsletters, business correspondence) and
+        # carry no risk signal on their own.
         flags.append(f"Contains {len(urls)} link(s), which should be checked carefully")
-        score += 1
 
     if re.search(IP_URL_PATTERN, email_text):
         flags.append("Contains a link that uses an IP address instead of a normal domain")
@@ -192,8 +283,9 @@ def analyze_text(email_text):
             score += 3
 
     if "http://" in text:
+        # Informational only, not scored: plenty of legitimate (if dated)
+        # sites and mailing-list archives still link over plain http.
         flags.append("Contains an insecure HTTP link")
-        score += 1
 
     return flags, score
 
