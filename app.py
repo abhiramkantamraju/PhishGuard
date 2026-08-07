@@ -9,6 +9,7 @@ from flask_limiter.util import get_remote_address
 from flask_wtf import CSRFProtect
 
 from detector import analyze_text, analyze_urls_network, extract_urls, get_risk_level
+from validation import MAX_EMAIL_LENGTH, validate_email_input
 
 
 app = Flask(__name__)
@@ -19,7 +20,6 @@ csrf = CSRFProtect(app)
 limiter = Limiter(get_remote_address, app=app, default_limits=[])
 
 DATABASE = "phishguard.db"
-MAX_EMAIL_LENGTH = 20000
 SAFE_BROWSING_API_KEY = os.environ.get("SAFE_BROWSING_API_KEY")
 
 
@@ -63,21 +63,12 @@ init_db()
 @limiter.limit("20 per minute", methods=["POST"])
 def index():
     if request.method == "POST":
-        email_text = request.form.get("email_text", "").strip()
+        # Validation lives in validation.py so it can be unit tested without a
+        # request context; this route only decides how to present the error.
+        email_text, error = validate_email_input(request.form.get("email_text"))
 
-        if not email_text:
-            return render_template(
-                "index.html",
-                error="Please paste an email message before checking it.",
-                email_text=email_text,
-            )
-
-        if len(email_text) > MAX_EMAIL_LENGTH:
-            return render_template(
-                "index.html",
-                error=f"Email text is too long (max {MAX_EMAIL_LENGTH} characters).",
-                email_text=email_text,
-            )
+        if error:
+            return render_template("index.html", error=error, email_text=email_text)
 
         # Only the offline, in-process checks run here so the page responds
         # immediately. Google Safe Browsing/WHOIS are network calls that can
