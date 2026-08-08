@@ -17,14 +17,54 @@ These tests call the logic directly rather than driving the web page, so they
 say nothing about layout or styling — only about behaviour.
 """
 
+import re
+import sqlite3
+
 import pytest
 
+import app as app_module
 from detector import analyze_text, get_risk_level
 from validation import (
     EMPTY_INPUT_MESSAGE,
     MAX_EMAIL_LENGTH,
     validate_email_input,
 )
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    """
+    A Flask test client backed by a throwaway database.
+
+    DATABASE is redirected into pytest's tmp_path so these tests never read or
+    write the real phishguard.db. CSRF and rate limiting are disabled because
+    neither is what these tests are checking — they are covered separately in
+    test_app.py.
+    """
+    db_path = tmp_path / "test_phishguard.db"
+    monkeypatch.setattr(app_module, "DATABASE", str(db_path))
+    app_module.init_db()
+    app_module.app.config["TESTING"] = True
+    app_module.app.config["WTF_CSRF_ENABLED"] = False
+    app_module.app.config["RATELIMIT_ENABLED"] = False
+    with app_module.app.test_client() as test_client:
+        yield test_client, str(db_path)
+
+
+def submit_scan(client, email_text):
+    """Posts the scan form the same way the browser does."""
+    page = client.get("/")
+    token = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
+    return client.post("/", data={"email_text": email_text, "csrf_token": token})
+
+
+def rows_in_scans(db_path):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        return conn.execute("SELECT * FROM scans").fetchall()
+    finally:
+        conn.close()
 
 
 # --- Test 1: valid behaviour -------------------------------------------------
@@ -179,3 +219,83 @@ def test_rejected_input_is_never_analyzed_or_stored():
         assert cleaned == ""
         # Nothing meaningful could be scored from it even if it were analyzed.
         assert analyze_text(cleaned) == ([], 0)
+
+
+# --- Saving the record: the Create half of the workflow ----------------------
+#
+# The two tests above prove the verdict is correct and that bad input is
+# refused. These two prove the workflow actually persists what it decided —
+# a scan the user cannot find again in their history has not really been saved.
+
+
+def test_valid_scan_is_saved_with_its_verdict(client):
+    """
+    Valid behaviour, end to end: submitting an email through the form must
+    write exactly one row holding the email itself and the verdict that was
+    calculated from it.
+
+    Asserting the stored score and risk_level matter more than asserting the
+    row count. If the analysis and the insert ever drifted apart, history
+    would show a verdict that the detector never actually produced.
+    """
+    test_client, db_path = client
+    email = (
+        "URGENT: your account has been suspended. "
+        "Verify your password now at http://192.168.10.44/login"
+    )
+
+    response = submit_scan(test_client, email)
+    assert response.status_code == 200
+
+    rows = rows_in_scans(db_path)
+    assert len(rows) == 1
+
+    saved = rows[0]
+    expected_flags, expected_score = analyze_text(email)
+
+    assert saved["email_text"] == email
+    assert saved["score"] == expected_score
+    assert saved["risk_level"] == get_risk_level(expected_score) == "Dangerous"
+    # Flags are stored newline-joined, so the saved reasoning must round-trip.
+    assert saved["flags"].split("\n") == expected_flags
+    # Defaults the history and network-check features rely on.
+    assert saved["note"] == ""
+    assert saved["network_checked"] == 0
+    assert saved["created_at"]
+
+
+def test_rejected_scan_is_not_saved(client):
+    """
+    Failure case, end to end: an empty submission must be turned away with a
+    message and must leave the database untouched.
+
+    This is the half a unit test cannot prove. validate_email_input() returning
+    an error only matters if the route actually stops on it — without that, the
+    user would be shown an error while a junk row was quietly saved anyway.
+    """
+    test_client, db_path = client
+
+    response = submit_scan(test_client, "   ")
+
+    assert response.status_code == 200
+    assert "Please paste an email message" in response.text
+    assert rows_in_scans(db_path) == []
+
+
+def test_each_valid_scan_is_saved_as_its_own_record(client):
+    """
+    Two different emails must produce two separate rows with their own
+    verdicts, not one row overwritten twice. This is what makes the history
+    list (and therefore the Read, Update and Delete operations) meaningful.
+    """
+    test_client, db_path = client
+
+    submit_scan(test_client, "Hi, are we still on for lunch tomorrow?")
+    submit_scan(test_client, "Confirm your bank account details immediately to avoid suspension.")
+
+    rows = rows_in_scans(db_path)
+
+    assert len(rows) == 2
+    assert len({row["id"] for row in rows}) == 2
+    assert rows[0]["risk_level"] == "Safe"
+    assert rows[1]["risk_level"] in {"Suspicious", "Dangerous"}
