@@ -1,5 +1,7 @@
 import csv
 
+import pytest
+
 from evaluate_dataset import evaluate_dataset, normalize_label
 
 
@@ -18,6 +20,11 @@ class TestNormalizeLabel:
     def test_legitimate_aliases(self):
         for value in ["legitimate", "safe", "ham", "0", "false"]:
             assert normalize_label(value) == "legitimate"
+
+    def test_unsupported_label_is_rejected_loudly(self):
+        # A silently mislabelled row would quietly corrupt the reported accuracy.
+        with pytest.raises(ValueError):
+            normalize_label("maybe")
 
 
 class TestEvaluateDataset:
@@ -59,7 +66,10 @@ class TestEvaluateDataset:
         csv_path = tmp_path / "fp.csv"
         write_csv(csv_path, [
             {"label": "phishing", "email_text": "Urgent: verify your account now!"},
-            {"label": "legitimate", "email_text": "Act now, limited time offer!"},
+            # A single urgency phrase is deliberately not enough to be called
+            # phishing, so this needs a signal that does score: a credential
+            # request in an otherwise legitimate email.
+            {"label": "legitimate", "email_text": "Please confirm your details before Friday."},
         ])
 
         results = evaluate_dataset(csv_path, show_rows=False)
@@ -77,6 +87,8 @@ class TestEvaluateDataset:
 
         assert results["total"] == 0
         assert results["accuracy"] == 0
+        assert results["false_positive_rate"] == 0
+        assert results["false_negative_rate"] == 0
         assert results["precision"] == 0
         assert results["recall"] == 0
         assert results["f1_score"] == 0

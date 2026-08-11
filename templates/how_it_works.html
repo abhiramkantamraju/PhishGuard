@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}How the score works — PhishGuard{% endblock %}
+
+{% block content %}
+    <div class="page-intro">
+        <h1>How the score works</h1>
+        <p>
+            PhishGuard has no machine-learning model and nothing hidden: it looks for a fixed
+            set of behaviours, and every point in the score can be traced back to one of them.
+        </p>
+    </div>
+
+    <section class="card">
+        <div class="card__header">
+            <h2>One score per category, not per phrase</h2>
+        </div>
+        <p>
+            Phishing emails usually repeat the same idea several ways — "verify your account",
+            "confirm your details", "update your records". Counting each phrase separately
+            would let one theme dominate the score, so each <strong>category</strong> below adds
+            its points at most once, however many of its phrases matched. The score is
+            therefore closer to a count of <em>independent</em> reasons to distrust an email.
+        </p>
+        <p>
+            A score below <strong>{{ suspicious_threshold }}</strong> is reported as
+            <span class="pill pill--safe">Safe</span>,
+            <strong>{{ suspicious_threshold }}</strong>–<strong>{{ dangerous_threshold - 1 }}</strong>
+            as <span class="pill pill--suspicious">Suspicious</span>, and
+            <strong>{{ dangerous_threshold }}</strong> or more as
+            <span class="pill pill--dangerous">Dangerous</span>. Those cut-offs were chosen by
+            measuring against thousands of real phishing and real legitimate emails — the
+            reasoning is in the project README.
+        </p>
+    </section>
+
+    <section class="card">
+        <div class="card__header">
+            <h2>What each category means</h2>
+            <p>Listed highest-scoring first.</p>
+        </div>
+        <div class="category-list">
+            {% for category in categories %}
+                <div class="category">
+                    <div class="category__points" aria-hidden="true">+{{ category.weight }}</div>
+                    <div>
+                        <h3 class="category__name">
+                            {{ category.label }}
+                            <span class="visually-hidden">adds {{ category.weight }} points</span>
+                        </h3>
+                        <p class="category__advice">{{ category.advice }}</p>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card__header">
+            <h2>What it deliberately doesn't do</h2>
+        </div>
+        <p>
+            Two findings are shown but never scored: "this email contains links" and "this
+            email contains an insecure HTTP link". Almost every real email contains a link, so
+            scoring them flagged ordinary mail as phishing — they are context for the reader,
+            not evidence.
+        </p>
+        <p>
+            PhishGuard also can't see anything it wasn't told to look for. A carefully written
+            phishing email that avoids every phrase in the rule set will score
+            <span class="pill pill--safe">Safe</span>. Treat a low score as "nothing obvious
+            found", never as "this email is genuine".
+        </p>
+        <div class="button-row">
+            <a class="button" href="{{ url_for('index') }}">Check an email</a>
+        </div>
+    </section>
+{% endblock %}

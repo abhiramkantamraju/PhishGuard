@@ -1,22 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}PhishGuard{% endblock %}
+{% block title %}PhishGuard — check an email for phishing{% endblock %}
 
 {% block content %}
-    <nav>
-        <a href="/history">View scan history</a>
-    </nav>
-    <h1>PhishGuard</h1>
-    <p>Paste an email message below to check it for common phishing warning signs.</p>
+    <div class="page-intro">
+        <h1>Is this email a phishing attempt?</h1>
+        <p>
+            Paste an email below — headers included, if you have them. PhishGuard checks the
+            wording, the links and the sender details against a set of documented rules, then
+            explains every warning sign it finds and why it matters.
+        </p>
+    </div>
 
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
+    <section class="card">
+        {% if error %}
+            <p class="alert alert--error" role="alert">{{ error }}</p>
+        {% endif %}
 
-    <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="email_text">Email text</label>
-        <textarea id="email_text" name="email_text" placeholder="Paste the email content here...">{{ email_text or "" }}</textarea>
-        <button type="submit">Analyze Email</button>
-    </form>
+        {% if samples %}
+            <div class="samples">
+                <p class="samples__label" id="samples-label">No email to hand? Load an example:</p>
+                <ul class="samples__list" aria-labelledby="samples-label">
+                    {% for sample in samples %}
+                        <li>
+                            <button type="button" class="sample" data-sample="{{ sample.text }}">
+                                <span class="sample__name">{{ sample.label }}</span>
+                                <span class="sample__description">{{ sample.description }}</span>
+                            </button>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        <form method="post" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="field">
+                <label for="email_text">Email text</label>
+                <p class="field__hint">
+                    Include the <code>From:</code>, <code>Reply-To:</code> and
+                    <code>Subject:</code> lines if you can — mismatched sender details are one
+                    of the strongest signals available.
+                </p>
+                <textarea id="email_text" name="email_text" required
+                          aria-describedby="char-count"
+                          placeholder="Paste the full email here…">{{ email_text or "" }}</textarea>
+                <p class="char-count" id="char-count" data-max="{{ max_length }}" aria-live="polite">
+                    0 / {{ "{:,}".format(max_length) }} characters
+                </p>
+            </div>
+
+            <div class="button-row">
+                <button type="submit" class="button">Analyse this email</button>
+                <a class="button button--secondary" href="{{ url_for('history') }}">View scan history</a>
+            </div>
+        </form>
+    </section>
 {% endblock %}

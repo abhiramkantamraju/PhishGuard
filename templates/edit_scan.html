@@ -1,19 +1,45 @@
 {% extends "base.html" %}
 
-{% block title %}Edit Scan Note{% endblock %}
+{% block title %}Note on scan #{{ scan["id"] }} — PhishGuard{% endblock %}
 
 {% block content %}
-    <h1>Edit Scan Note</h1>
-    <p>Risk level: {{ scan["risk_level"] }} | Score: {{ scan["score"] }}</p>
+    <div class="page-intro">
+        <h1>{{ "Edit note" if scan["note"] else "Add a note" }}</h1>
+        <p>
+            Scan #{{ scan["id"] }} &middot; {{ scan["created_at"] }} &middot;
+            <span class="pill pill--{{ scan['risk_level'] | lower }}">{{ scan["risk_level"] }}</span>
+            &middot; score {{ scan["score"] }}
+        </p>
+    </div>
 
-    <h2>Saved email</h2>
-    <pre>{{ scan["email_text"] }}</pre>
+    <section class="card">
+        {% if error %}
+            <p class="alert alert--error" role="alert">{{ error }}</p>
+        {% endif %}
 
-    <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="note">Note</label>
-        <textarea id="note" name="note" placeholder="Add your note here...">{{ scan["note"] or "" }}</textarea>
-        <button type="submit">Save note</button>
-        <a href="/history">Cancel</a>
-    </form>
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="field">
+                <label for="note">Your note</label>
+                <p class="field__hint">
+                    What you decided and why — "reported to IT", "confirmed genuine, called the
+                    bank", "deleted". Leave it empty to clear an existing note.
+                </p>
+                <textarea id="note" name="note" style="min-height: 140px;"
+                          placeholder="What did you decide about this email?">{{ note }}</textarea>
+            </div>
+            <div class="button-row">
+                <button type="submit" class="button">Save note</button>
+                <a class="button button--secondary"
+                   href="{{ url_for('scan_detail', scan_id=scan['id']) }}">Cancel</a>
+            </div>
+        </form>
+    </section>
+
+    <section class="card">
+        <div class="card__header">
+            <h2>The saved email</h2>
+        </div>
+        <pre>{{ scan["email_text"] }}</pre>
+    </section>
 {% endblock %}

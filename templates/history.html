@@ -1,45 +1,156 @@
 {% extends "base.html" %}
 
-{% block title %}PhishGuard History{% endblock %}
+{% block title %}Scan history — PhishGuard{% endblock %}
 
 {% block content %}
-    <h1>Scan History</h1>
-    <a href="/">Analyze another email</a>
+    <div class="page-intro">
+        <h1>Scan history</h1>
+        <p>Every email you've checked, newest first. Open a scan to see its full breakdown, or add a note to record what you decided.</p>
+    </div>
+
+    {% if total_count %}
+        <div class="stats">
+            <div class="stat">
+                <span class="stat__value">{{ total_count }}</span>
+                <span class="stat__label">Total scans</span>
+            </div>
+            {% for name in risk_levels %}
+                <div class="stat stat--{{ name | lower }}">
+                    <span class="stat__value">{{ totals.get(name, 0) }}</span>
+                    <span class="stat__label">{{ name }}</span>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% if total_count %}
+        <form class="filters" method="get" action="{{ url_for('history') }}">
+            <div class="field filters__search">
+                <label for="q">Search</label>
+                <input type="search" id="q" name="q" value="{{ search }}"
+                       placeholder="Email text, note or warning sign…">
+            </div>
+            <div class="field filters__risk">
+                <label for="risk">Risk level</label>
+                <select id="risk" name="risk">
+                    <option value="">All levels</option>
+                    {% for name in risk_levels %}
+                        <option value="{{ name }}" {% if risk == name %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="button-row">
+                <button type="submit" class="button">Filter</button>
+                {% if search or risk %}
+                    <a class="button button--secondary" href="{{ url_for('history') }}">Clear</a>
+                {% endif %}
+            </div>
+        </form>
+    {% endif %}
 
     {% if scans %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Email preview</th>
-                    <th>Risk</th>
-                    <th>Score</th>
-                    <th>Note</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for scan in scans %}
+        <div class="toolbar">
+            <p style="margin:0; color: var(--text-muted); font-size:.9rem;">
+                Showing {{ scans | length }}
+                {% if search or risk %}matching {% endif %}
+                {{ "scan" if scans | length == 1 else "scans" }}{% if total_count > page_size %}
+                    (newest {{ page_size }}){% endif %}.
+            </p>
+            <div class="button-row">
+                <a class="button button--secondary button--small"
+                   href="{{ url_for('export_history', file_format='csv') }}">Export CSV</a>
+                <a class="button button--secondary button--small"
+                   href="{{ url_for('export_history', file_format='json') }}">Export JSON</a>
+                <a class="button button--small" href="{{ url_for('index') }}">New scan</a>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <caption class="visually-hidden">Saved phishing scans, newest first</caption>
+                {#
+                  Fixed column widths rather than letting the browser size the
+                  columns from content: an email preview or a long note would
+                  otherwise push the Actions column off the right edge, which is
+                  exactly the column that must always be reachable. Overflowing
+                  text is truncated with an ellipsis instead.
+                #}
+                <colgroup>
+                    <col style="width: 5%">
+                    <col style="width: 14%">
+                    <col style="width: 38%">
+                    <col style="width: 11%">
+                    <col style="width: 7%">
+                    <col style="width: 13%">
+                    <col style="width: 12%">
+                </colgroup>
+                <thead>
                     <tr>
-                        <td>{{ scan["created_at"] }}</td>
-                        <td class="preview">{{ scan["email_text"][:120] }}{% if scan["email_text"]|length > 120 %}...{% endif %}</td>
-                        <td><span class="risk {{ scan["risk_level"] | lower }}">{{ scan["risk_level"] }}</span></td>
-                        <td>{{ scan["score"] }}</td>
-                        <td>{{ scan["note"] or "No note" }}</td>
-                        <td>
-                            <div class="actions">
-                                <a href="/history/{{ scan["id"] }}/edit">Edit note</a>
-                                <form method="post" action="/history/{{ scan["id"] }}/delete">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit">Delete</button>
-                                </form>
-                            </div>
-                        </td>
+                        <th scope="col">#</th>
+                        <th scope="col">Date</th>
+                        <th scope="col">Email preview</th>
+                        <th scope="col">Risk</th>
+                        <th scope="col" class="numeric">Score</th>
+                        <th scope="col">Note</th>
+                        <th scope="col">Actions</th>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {% for scan in scans %}
+                        <tr>
+                            <td data-label="#" class="nowrap">
+                                <a href="{{ url_for('scan_detail', scan_id=scan['id']) }}">{{ scan["id"] }}</a>
+                            </td>
+                            <td data-label="Date" class="nowrap">{{ scan["created_at"] }}</td>
+                            <td data-label="Email">
+                                <a class="preview" href="{{ url_for('scan_detail', scan_id=scan['id']) }}"
+                                   title="{{ scan['email_text'][:300] }}">
+                                    {{ scan["email_text"] | replace("\n", " ") | truncate(90, true, "…") }}
+                                </a>
+                            </td>
+                            <td data-label="Risk">
+                                <span class="pill pill--{{ scan['risk_level'] | lower }}">{{ scan["risk_level"] }}</span>
+                            </td>
+                            <td data-label="Score" class="numeric">{{ scan["score"] }}</td>
+                            <td data-label="Note">
+                                {% if scan["note"] %}
+                                    <span class="note-text">{{ scan["note"] | truncate(60, true, "…") }}</span>
+                                {% else %}
+                                    <span class="note-text note-text--empty">No note</span>
+                                {% endif %}
+                            </td>
+                            <td data-label="Actions">
+                                {# No "View" button: the id and the preview are both links to
+                                   the scan, and a third one only crowds the row. #}
+                                <div class="row-actions">
+                                    <a class="button button--ghost button--small"
+                                       href="{{ url_for('edit_scan', scan_id=scan['id']) }}">Note</a>
+                                    <form method="post"
+                                          action="{{ url_for('delete_scan', scan_id=scan['id']) }}"
+                                          data-confirm="Delete scan #{{ scan['id'] }}? This cannot be undone.">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="button button--ghost button--small button--danger">
+                                            Delete
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% elif search or risk %}
+        <div class="empty-state">
+            <h2>No scans match that filter</h2>
+            <p>Nothing in your history matches those criteria. Try a different search term or risk level.</p>
+            <a class="button button--secondary" href="{{ url_for('history') }}">Clear filters</a>
+        </div>
     {% else %}
-        <p class="empty">No scans have been saved yet.</p>
+        <div class="empty-state">
+            <h2>No scans saved yet</h2>
+            <p>Once you analyse an email it appears here, with its risk level, score and every warning sign that was found.</p>
+            <a class="button" href="{{ url_for('index') }}">Analyse your first email</a>
+        </div>
     {% endif %}
 {% endblock %}

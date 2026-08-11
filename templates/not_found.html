@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Not found — PhishGuard{% endblock %}
+
+{% block content %}
+    <div class="empty-state">
+        <h1>{% if scan_id %}Scan #{{ scan_id }} doesn't exist{% else %}Page not found{% endif %}</h1>
+        <p>
+            {% if scan_id %}
+                It may have been deleted, or the link may be mistyped.
+            {% else %}
+                That address doesn't match any page in PhishGuard.
+            {% endif %}
+        </p>
+        <div class="button-row" style="justify-content: center;">
+            <a class="button" href="{{ url_for('index') }}">Check an email</a>
+            <a class="button button--secondary" href="{{ url_for('history') }}">Scan history</a>
+        </div>
+    </div>
+{% endblock %}

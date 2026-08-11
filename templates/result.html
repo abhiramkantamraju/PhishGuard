@@ -1,71 +1,207 @@
 {% extends "base.html" %}
 
-{% block title %}PhishGuard Result{% endblock %}
+{% set level = analysis.risk_level %}
+{% set level_class = level | lower %}
+
+{% block title %}{{ level }} — PhishGuard scan #{{ scan["id"] }}{% endblock %}
 
 {% block content %}
-    <h1>Analysis Result</h1>
+    <div class="page-intro">
+        <h1>{% if is_new %}Analysis result{% else %}Scan #{{ scan["id"] }}{% endif %}</h1>
+        <p>Scanned {{ scan["created_at"] }}{% if not is_new %} &middot; this page is a permanent link to the saved scan{% endif %}.</p>
+    </div>
 
-    <p>
-        Risk level:
-        <span id="risk-badge" class="risk {{ risk_level | lower }}">{{ risk_level }}</span>
-    </p>
-    <p>Risk score: <span id="risk-score">{{ score }}</span></p>
+    {#
+      The verdict repeats the risk level as a word, a number and a filled meter.
+      Colour alone would leave the most important thing on the page inaccessible
+      to anyone who can't distinguish the three shades.
+    #}
+    <section class="verdict verdict--{{ level_class }}" id="verdict" aria-labelledby="verdict-level">
+        <div>
+            <p class="verdict__label">Risk level</p>
+            <h2 class="verdict__level" id="verdict-level">{{ level }}</h2>
+            <p class="verdict__summary" id="verdict-summary">
+                {% if level == "Dangerous" %}
+                    Several independent warning signs point the same way. Treat this as a
+                    phishing attempt: don't click anything in it, and don't reply.
+                {% elif level == "Suspicious" %}
+                    Enough warning signs to be worth a second look. Check the details below
+                    before you act on anything this email asks for.
+                {% else %}
+                    None of PhishGuard's rules fired strongly enough to call this phishing.
+                    That is not a guarantee — a well-written phishing email can look ordinary.
+                {% endif %}
+            </p>
+        </div>
 
-    <h2>Warning signs found</h2>
-    <ul id="flags-list">
-        {% for flag in flags %}
-            <li>{{ flag }}</li>
-        {% endfor %}
-    </ul>
-    <p id="no-flags-message" {% if flags %}style="display:none;"{% endif %}>
-        No common phishing warning signs were detected by the current rules.
-    </p>
+        <div class="verdict__score">
+            <span class="verdict__score-value" id="risk-score">{{ analysis.score }}</span>
+            <span class="verdict__score-label">Risk score</span>
+            <div class="meter" id="risk-meter" role="img"
+                 aria-label="Risk score {{ analysis.score }} out of 10 or more">
+                {% for step in range(1, 11) %}
+                    <span class="meter__segment {% if step <= analysis.score %}meter__segment--on{% endif %}"></span>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
 
-    {% if check_links %}
-        <p id="network-check-status" class="network-status">Checking links against Google Safe Browsing and domain age…</p>
+    <section class="card">
+        <div class="card__header">
+            <h2>What PhishGuard found</h2>
+            <p id="findings-count">
+                {% set scored = analysis.scored_categories | length %}
+                {% if scored %}
+                    {{ scored }} scoring {{ "category" if scored == 1 else "categories" }} triggered
+                    across {{ analysis.findings | length }} individual
+                    {{ "finding" if analysis.findings | length == 1 else "findings" }}.
+                {% else %}
+                    No scoring rules fired. Anything listed below is context only.
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="findings" id="findings">
+            {% for category, findings in analysis.grouped() %}
+                <div class="finding-group {% if category.weight == 0 %}finding-group--informational{% endif %}">
+                    <div class="finding-group__header">
+                        <h3 class="finding-group__title">{{ category.label }}</h3>
+                        {% if category.weight %}
+                            <span class="finding-group__weight">+{{ category.weight }} points</span>
+                        {% else %}
+                            <span class="finding-group__weight">0 points</span>
+                        {% endif %}
+                    </div>
+                    {% if category.advice %}
+                        <p class="finding-group__advice">{{ category.advice }}</p>
+                    {% endif %}
+                    <ul class="finding-list">
+                        {% for finding in findings %}
+                            <li>{{ finding.message }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endfor %}
+
+            {% if not analysis.findings %}
+                <div class="finding-group finding-group--informational">
+                    <p class="finding-group__advice">
+                        Nothing at all stood out — no urgency language, no credential requests
+                        and no suspicious links.
+                    </p>
+                </div>
+            {% endif %}
+
+            {# Populated by the background link check below. #}
+            <div class="finding-group" id="network-group" hidden>
+                <div class="finding-group__header">
+                    <h3 class="finding-group__title">Live link checks</h3>
+                    <span class="finding-group__weight">Safe Browsing &amp; WHOIS</span>
+                </div>
+                <ul class="finding-list" id="network-findings"></ul>
+            </div>
+        </div>
+
+        {% if check_links %}
+            <p class="network-status" id="network-check-status" aria-live="polite">
+                <span class="spinner" id="network-spinner" aria-hidden="true"></span>
+                Checking the links against Google Safe Browsing and domain registration age…
+            </p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <div class="card__header">
+            <h2>The email that was checked</h2>
+        </div>
+        <pre>{{ scan["email_text"] }}</pre>
+    </section>
+
+    {% if scan["note"] %}
+        <section class="card">
+            <div class="card__header">
+                <h2>Your note</h2>
+            </div>
+            <p>{{ scan["note"] }}</p>
+        </section>
     {% endif %}
 
-    <h2>Checked email</h2>
-    <pre>{{ email_text }}</pre>
-
-    <div class="actions">
-        <a href="/">Check another email</a>
-        <a href="/history">View scan history</a>
-        <a href="/history/{{ scan_id }}/edit">Add note to this scan</a>
+    <div class="button-row" style="margin-top: var(--space-5);">
+        <a class="button" href="{{ url_for('index') }}">Check another email</a>
+        <a class="button button--secondary" href="{{ url_for('edit_scan', scan_id=scan['id']) }}">
+            {{ "Edit note" if scan["note"] else "Add a note" }}
+        </a>
+        <a class="button button--secondary" href="{{ url_for('history') }}">All scans</a>
+        <form method="post" action="{{ url_for('delete_scan', scan_id=scan['id']) }}"
+              data-confirm="Delete scan #{{ scan['id'] }}? This cannot be undone.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="button button--ghost button--danger">Delete this scan</button>
+        </form>
     </div>
 
     {% if check_links %}
         <script>
+            /*
+             * Safe Browsing and WHOIS are network calls that can take several
+             * seconds, so they don't run inline with the scan. The page renders
+             * with the offline analysis, then asks the server for the link
+             * checks and updates the verdict in place. The endpoint is
+             * idempotent, so a refresh can't double-count the result.
+             */
             (function () {
                 var statusEl = document.getElementById("network-check-status");
-                var flagsList = document.getElementById("flags-list");
-                var noFlagsMessage = document.getElementById("no-flags-message");
-                var riskBadge = document.getElementById("risk-badge");
-                var riskScore = document.getElementById("risk-score");
+                var spinner = document.getElementById("network-spinner");
+                var group = document.getElementById("network-group");
+                var list = document.getElementById("network-findings");
+                var verdict = document.getElementById("verdict");
+                var levelEl = document.getElementById("verdict-level");
+                var scoreEl = document.getElementById("risk-score");
+                var meter = document.getElementById("risk-meter");
 
-                fetch("/history/{{ scan_id }}/network-check", {
+                function stopSpinner() {
+                    if (spinner) { spinner.remove(); }
+                }
+
+                function paintScore(score, level) {
+                    scoreEl.textContent = score;
+                    levelEl.textContent = level;
+                    verdict.className = "verdict verdict--" + level.toLowerCase();
+                    meter.setAttribute("aria-label", "Risk score " + score + " out of 10 or more");
+                    Array.prototype.forEach.call(meter.children, function (segment, index) {
+                        segment.classList.toggle("meter__segment--on", index < score);
+                    });
+                }
+
+                fetch("{{ url_for('network_check', scan_id=scan['id']) }}", {
                     method: "POST",
-                    headers: { "X-CSRFToken": "{{ csrf_token() }}" },
+                    headers: { "X-CSRFToken": "{{ csrf_token() }}" }
                 })
-                    .then(function (response) { return response.json(); })
+                    .then(function (response) {
+                        if (!response.ok) { throw new Error("HTTP " + response.status); }
+                        return response.json();
+                    })
                     .then(function (data) {
-                        if (data.flags && data.flags.length > 0) {
-                            data.flags.forEach(function (flag) {
-                                var li = document.createElement("li");
-                                li.textContent = flag;
-                                flagsList.appendChild(li);
+                        stopSpinner();
+                        var findings = data.findings || [];
+                        if (findings.length > 0) {
+                            findings.forEach(function (finding) {
+                                var item = document.createElement("li");
+                                item.textContent = finding.message;
+                                list.appendChild(item);
                             });
-                            noFlagsMessage.style.display = "none";
-                            riskBadge.textContent = data.risk_level;
-                            riskBadge.className = "risk " + data.risk_level.toLowerCase();
-                            riskScore.textContent = data.score;
-                            statusEl.textContent = "Link checks complete — additional warning signs found above.";
+                            group.hidden = false;
+                            statusEl.textContent = "Link checks complete — see “Live link checks” above.";
                         } else {
-                            statusEl.textContent = "Link checks complete — no additional issues found.";
+                            statusEl.textContent =
+                                "Link checks complete — Safe Browsing and WHOIS found nothing further.";
                         }
+                        paintScore(data.score, data.risk_level);
                     })
                     .catch(function () {
-                        statusEl.textContent = "Link checks could not be completed (network unavailable).";
+                        stopSpinner();
+                        statusEl.textContent =
+                            "Link checks could not be completed (no network, or the service is "
+                            + "unavailable). The analysis above is unaffected.";
                     });
             })();
         </script>
