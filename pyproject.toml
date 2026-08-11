@@ -1,0 +1,49 @@
+# Tooling configuration only. PhishGuard is run as a Flask app and a couple of
+# CLI scripts, not installed as a distribution, so there is no [project] table
+# and no build backend — adding one would imply `pip install .` is a supported
+# way to use this, which it isn't.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["data", "venv", ".venv", "screenshots"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes: unused imports, undefined names
+    "I",    # isort: import ordering
+    "B",    # flake8-bugbear: likely bugs
+    "C4",   # comprehension simplifications
+    "UP",   # pyupgrade: outdated syntax
+    "SIM",  # simplifications
+    "RET",  # return-statement hygiene
+    "ARG",  # unused arguments
+    "PTH",  # prefer pathlib over os.path
+]
+ignore = [
+    # Flask error handlers must accept the exception argument even when the
+    # response doesn't use it, and pytest fixtures are requested by name.
+    "ARG001",
+    # `raise ... from err` inside a best-effort network wrapper adds noise; the
+    # original error is deliberately discarded, which is the documented design.
+    "B904",
+    # `open(path, encoding="utf-8", newline="")` is the idiomatic form for the
+    # csv module and reads better than `Path.open` with the same arguments;
+    # pathlib is used everywhere it actually helps (joining, mkdir, exists).
+    "PTH123",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert on literals and use fixtures that shadow imports; the scripts
+# deliberately mutate sys.path before importing the package.
+# Injected fakes must match the real call signature even where the test doesn't
+# read every argument, so unused-argument warnings are noise here.
+"tests/*" = ["ARG001", "ARG002", "ARG005"]
+"scripts/*" = ["E402"]
+"build_realistic_dataset.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "evaluate_dataset", "phishguard", "scripts"]
+known-local-folder = ["conftest"]

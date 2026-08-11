@@ -1,4 +1,4 @@
-name: Tests
+name: CI
 
 on:
   push:
@@ -7,18 +7,59 @@ on:
     branches: [main]
 
 jobs:
-  pytest:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      # `ruff check` only. `ruff format` is deliberately not enforced: much of
+      # this code is hand-wrapped for readability (regex alternations, aligned
+      # rule tables) and the formatter would reflow it into something harder to
+      # read for no correctness gain.
+      - run: ruff check .
 
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 is what render.yaml pins for deployment; 3.11 guards against
+        # accidentally using syntax that the older interpreter can't parse.
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -v
 
-      - name: Run tests
-        run: pytest -v
+  smoke:
+    # The dataset benchmarks need ~140MB of third-party corpora, far too slow
+    # for CI. This instead proves the app boots, serves the scan form and
+    # classifies a known phishing email end to end.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-render.txt
+      - name: Boot with gunicorn and check the app responds
+        run: |
+          gunicorn app:app --bind 127.0.0.1:8000 --daemon --pid gunicorn.pid
+          for attempt in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8000/healthz && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8000/healthz | grep -q '"ok"'
+          curl -sf http://127.0.0.1:8000/ | grep -q 'Analyse this email'
+          kill "$(cat gunicorn.pid)"
+      - name: Evaluate the bundled sample dataset
+        run: python evaluate_dataset.py sample_data/sample_emails.csv --quiet | grep -q 'Accuracy: 100.00%'
