@@ -1,91 +1,59 @@
 """
-Builds data/realistic_phishing/realistic_emails.csv: a balanced sample of
-real, unstructured phishing/spam and legitimate emails, used alongside the
-templated Kaggle set as a second, harder evaluation benchmark (see README).
+Builds the evaluation benchmarks from real, public email corpora.
 
-Sources (all public, downloaded fresh - nothing is committed to git since
-data/ is gitignored):
-  - CEAS_08   - CEAS 2008 Spam Challenge corpus
-  - Enron     - Enron-Spam legitimate business email corpus
-  - Nazario   - Jose Nazario's phishing corpus
-  - Nigerian_Fraud - advance-fee ("419") scam corpus
-  - SpamAssasin - Apache SpamAssassin public spam/ham corpus
-  compiled by https://github.com/rokibulroni/Phishing-Email-Dataset
+Run once, then evaluate:
 
-Usage: python build_realistic_dataset.py
+    python build_realistic_dataset.py
+    python evaluate_dataset.py data/realistic_phishing/phishing_focused_holdout.csv --quiet
+    python evaluate_dataset.py data/realistic_phishing/realistic_emails.csv --quiet
+
+Three CSVs are produced under `data/realistic_phishing/` (all gitignored — they
+are derived from third-party corpora, not project source):
+
+    realistic_emails.csv            4,000-email mixed-source benchmark; keeps
+                                    each corpus's own spam/ham label, so generic
+                                    commercial spam counts as phishing. Harder
+                                    than PhishGuard's actual scope, kept as an
+                                    honest upper bound on difficulty.
+    phishing_focused_tuning.csv     3,000 emails; the split the rules and score
+                                    thresholds were developed against.
+    phishing_focused_holdout.csv    3,000 emails, disjoint from the above; the
+                                    split the README's headline numbers come
+                                    from, so they aren't self-graded.
+
+See `scripts/corpora.py` for the sources, the sampling seeds, and why the
+phishing-focused benchmark is defined the way it is.
 """
-import csv
-import random
+
 import sys
 from pathlib import Path
-from urllib.request import urlretrieve
 
-csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-RAW_BASE_URL = "https://raw.githubusercontent.com/rokibulroni/Phishing-Email-Dataset/main"
-SOURCES = ["CEAS_08", "Enron", "Nazario", "Nigerian_Fraud", "SpamAssasin"]
-SAMPLE_SIZE = 4000
-RANDOM_SEED = 42
-
-DATA_DIR = Path(__file__).parent / "data" / "realistic_phishing"
-SOURCES_DIR = DATA_DIR / "_sources"
-OUT_PATH = DATA_DIR / "realistic_emails.csv"
-
-
-def download_sources():
-    SOURCES_DIR.mkdir(parents=True, exist_ok=True)
-    for source in SOURCES:
-        dest = SOURCES_DIR / f"{source}.csv"
-        if dest.exists():
-            print(f"Already downloaded: {dest}")
-            continue
-        url = f"{RAW_BASE_URL}/{source}.csv"
-        print(f"Downloading {url} -> {dest}")
-        urlretrieve(url, dest)
-
-
-def load_rows():
-    rows = []
-    for source in SOURCES:
-        path = SOURCES_DIR / f"{source}.csv"
-        with open(path, encoding="utf-8", errors="replace", newline="") as fh:
-            reader = csv.DictReader(fh)
-            for row in reader:
-                label = row.get("label")
-                if label not in ("0", "1"):
-                    continue
-                subject = (row.get("subject") or "").strip()
-                body = (row.get("body") or "").strip()
-                email_text = f"{subject}\n\n{body}".strip()
-                if not email_text:
-                    continue
-                rows.append({
-                    "label": "phishing" if label == "1" else "legitimate",
-                    "email_text": email_text,
-                })
-    return rows
+from scripts.corpora import (  # noqa: E402
+    FOCUSED_HOLDOUT_PATH,
+    FOCUSED_TUNING_PATH,
+    MIXED_PATH,
+    build_focused_splits,
+    build_mixed_sample,
+    download_sources,
+    write_dataset,
+)
 
 
 def main():
     download_sources()
-    rows = load_rows()
-    print(f"Total combined rows available: {len(rows)}")
 
-    random.seed(RANDOM_SEED)
-    random.shuffle(rows)
-    sample = rows[:SAMPLE_SIZE]
+    print("\nMixed-source benchmark")
+    write_dataset(MIXED_PATH, build_mixed_sample())
 
-    label_counts = {}
-    for row in sample:
-        label_counts[row["label"]] = label_counts.get(row["label"], 0) + 1
-    print(f"Sample size: {len(sample)}, label counts: {label_counts}")
+    print("\nPhishing-focused benchmark")
+    splits = build_focused_splits()
+    write_dataset(FOCUSED_TUNING_PATH, splits["tuning"])
+    write_dataset(FOCUSED_HOLDOUT_PATH, splits["holdout"])
 
-    with open(OUT_PATH, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["label", "email_text"])
-        writer.writeheader()
-        writer.writerows(sample)
-
-    print(f"Wrote {OUT_PATH}")
+    print("\nDone. Evaluate with:")
+    print(f"  python evaluate_dataset.py {FOCUSED_HOLDOUT_PATH.as_posix()} --quiet")
 
 
 if __name__ == "__main__":
