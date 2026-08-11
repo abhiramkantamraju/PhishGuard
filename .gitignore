@@ -23,3 +23,10 @@ CLAUDE.md
 Thumbs.db
 
 pkg/
+
+# Local development scratch
+.venv/
+/screenshots/
+server.log
+*.pid
+smoke*.db

@@ -1,224 +1,260 @@
 # PhishGuard
-Repository for the Project PhishGuard
 
-## Project Description
-Webpage to detect phishing emails and suspicious urls
+A web app that tells you whether a pasted email is a phishing attempt — and, more
+importantly, *why*. Paste an email, get a Safe / Suspicious / Dangerous verdict, a
+score, and a plain-English list of every warning sign found, grouped by what kind
+of trick it is. Every scan is saved so it can be reviewed, annotated and exported.
 
-## Setup
+Built for **IT Project IV** (student: Abhiram; instructor: Dr. Denilton Luiz Darold).
+There is no machine-learning model here: the detection is a documented set of rules,
+and the accuracy claims below come with the script that reproduces them.
+
+![The scan form](docs/screenshots/scan-form.jpg)
+
+![A Dangerous verdict, with every finding grouped and explained](docs/screenshots/result-dangerous.jpg)
+
+More screenshots: [scan history](docs/screenshots/history.jpg) ·
+[how the score works](docs/screenshots/how-it-works.jpg) ·
+[dark mode](docs/screenshots/result-dark.jpg) ·
+[on a phone](docs/screenshots/history-mobile.jpg)
+
+---
+
+## Results at a glance
+
+Measured with `evaluate_dataset.py` against real, public email corpora. The
+phishing-focused benchmark is the headline one — it is scope-matched to what
+PhishGuard is built to detect, and the rules were tuned on a **disjoint** split
+from the one reported here.
+
+| Benchmark | Emails | Accuracy | Precision | Recall | F1 | False positives |
+|---|---|---|---|---|---|---|
+| **Phishing-focused (holdout)** | 3,000 | **89.53%** | **97.06%** | **81.53%** | **88.62%** | 2.47% of legitimate |
+| Phishing-focused (tuning split) | 3,000 | 88.90% | 96.57% | 80.67% | 87.90% | 2.87% of legitimate |
+| Mixed-source (spam included) | 4,000 | 52.55% | 82.74% | 13.13% | 22.66% | 3.08% of legitimate |
+| Kaggle templated set | 800 | 100.00% | 100.00% | 100.00% | 100.00% | 0.00% |
+| Legitimate-marketing stress test | 10 | 100.00% | — | — | — | **0 of 10** |
+
+Two of those numbers need their context stated rather than buried:
+
+- **The mixed-source benchmark looks terrible, and that is the honest headline for
+  it.** 88.5% of what it labels "phishing" is generic commercial spam — pharmacy
+  ads, stock pump-and-dumps, replica goods — not credential theft or financial
+  fraud. Recall on that spam is 4.5%; recall on the actual phishing inside the same
+  benchmark is 79.8%. `python scripts/breakdown.py` prints that split per corpus.
+  PhishGuard is a phishing detector, not a spam filter, and the aggregate number is
+  measuring the wrong thing rather than revealing a hidden weakness.
+- **The Kaggle set's 100% means very little.** All 800 rows are repeats of just 8
+  unique sentences. Full coverage of 8 sentences is not evidence of real-world
+  accuracy; it is kept only because it was the project's original evidence artifact.
+
+### What changed, and by how much
+
+The first version of the detector scored a single point for any one matched phrase.
+Rebuilding it around weighted categories with a calibrated threshold moved it a long
+way in both directions at once:
+
+| | Before | After |
+|---|---|---|
+| Recall (phishing-focused benchmark) | 11.47% | **81.53%** |
+| Precision | 82.37% | **97.06%** |
+| F1 | 20.14% | **88.62%** |
+| False positives on legitimate marketing email | 40% (4 of 10) | **0%** |
+| Automated tests | 75 | **198** |
+
+---
+
+## Running it
 
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+python app.py                   # http://127.0.0.1:5000
 ```
 
-## Running
+That is the whole setup. No API keys, no database server, no internet connection
+required — everything that produces the numbers above runs offline.
 
-```bash
-python app.py
-```
+### Configuration
 
-The app runs on http://127.0.0.1:5000 by default.
+Every one of these is optional.
 
-Set the `SECRET_KEY` environment variable to a stable random value in any
-persistent deployment (it is used for CSRF protection). Set `FLASK_DEBUG=1`
-to enable the Flask debugger during local development only — never in
-production, since it allows arbitrary code execution.
+| Variable | Default | What it does |
+|---|---|---|
+| `SECRET_KEY` | random per start | Signs CSRF tokens. Set it in any real deployment, or open forms break on restart. |
+| `PHISHGUARD_DB` | `phishguard.db` | Where the SQLite file lives. Point it at a mounted disk in production. |
+| `SAFE_BROWSING_API_KEY` | unset | Enables the [Google Safe Browsing](https://developers.google.com/safe-browsing) check. Without it that check is skipped silently; everything else, including the WHOIS domain-age check, still works. |
+| `FLASK_DEBUG` | `0` | `1` enables the debugger. **Development only** — it allows arbitrary code execution. |
+| `PORT` | `5000` | Port for the development server. |
 
-Optionally set `SAFE_BROWSING_API_KEY` to a [Google Safe Browsing API](https://developers.google.com/safe-browsing)
-key to check scanned URLs against Google's known-threat list. Without it,
-that check is silently skipped — every other feature, including the WHOIS
-domain-age check, works with no configuration.
-
-## Tests
+### Tests and linting
 
 ```bash
 pip install -r requirements-dev.txt
-pytest
+pytest            # 198 tests, no network access, ~1s
+ruff check .
 ```
 
-## Dataset Evaluation
-
-PhishGuard includes a small evaluation runner that can be used with the
-included sample data or with a larger Kaggle phishing email dataset exported to
-CSV/XLSX.
-
-Expected CSV columns:
-
-- `label`: `phishing` or `legitimate`
-- `email_text`: the full email text to analyze
-
-Run the sample evaluation:
+### Reproducing the benchmarks
 
 ```bash
-python evaluate_dataset.py sample_data/sample_emails.csv
-```
-
-Run the downloaded Kaggle evaluation:
-
-```bash
-python evaluate_dataset.py "data/kaggle_phishing_email/phishing_dataset (1).xlsx"
-```
-
-For a shorter output:
-
-```bash
+python build_realistic_dataset.py          # downloads ~140MB of public corpora, writes 3 CSVs
+python evaluate_dataset.py data/realistic_phishing/phishing_focused_holdout.csv --quiet
+python evaluate_dataset.py data/realistic_phishing/realistic_emails.csv --quiet
 python evaluate_dataset.py "data/kaggle_phishing_email/phishing_dataset (1).xlsx" --quiet
+python evaluate_dataset.py sample_data/legitimate_marketing_emails.csv --quiet
+
+python scripts/calibrate.py                # the threshold sweep behind the chosen cut-offs
+python scripts/calibrate.py --rules        # per-rule hit rate on phishing vs legitimate mail
+python scripts/breakdown.py                # recall per source corpus
 ```
 
-The script reports total emails, correct predictions, accuracy, false positives,
-and false negatives. These results can be added to the final README/report as
-project evidence.
+The sampling is seeded, so the CSVs are byte-identical on every machine.
+`docs/evaluation.md` has the full methodology, the corpora, and the reasoning.
 
-Kaggle dataset used locally:
+---
 
-- Title: Phishing Email Dataset
-- Source: https://www.kaggle.com/datasets/tommyf1/phishing-email-dataset
-- License: MIT
+## How the detection works
 
-Current Kaggle evaluation result:
-
-- Total emails: 800
-- Correct predictions: 800
-- Accuracy: 100.00%
-- False positives: 0 (0.00%)
-- False negatives: 0 (0.00%)
-
-Interpretation: this Kaggle dataset is templated — all 800 rows are repeats
-of only 8 unique sentences (4 phishing, 4 legitimate). The two phishing
-templates PhishGuard originally missed ("your email password expires
-today...", "you have won ¥500,000...") are now covered by the
-credential-expiry and prize/lottery-scam keyword rules added to
-`detector.py`. 100% accuracy reflects full rule coverage of this dataset's
-specific phrasing, not a claim of perfect real-world detection — a phishing
-email with none of these keywords or URL red flags will still be missed.
-`evaluate_dataset.py` deliberately doesn't exercise the Google Safe
-Browsing/WHOIS checks (see below), since those need live network access and
-would make the evidence run slow and non-deterministic; it measures the
-offline rule engine only.
-
-## Second benchmark: realistic, unstructured email data
-
-Because the Kaggle set above is small and templated, `build_realistic_dataset.py`
-builds a second, harder benchmark from real (not synthetic) public email
-corpora — Enron business email (legitimate), the CEAS 2008 Spam Challenge and
-Apache SpamAssassin corpora (mixed spam/legitimate), and the Nazario and
-Nigerian-fraud phishing corpora — compiled by
-[rokibulroni/Phishing-Email-Dataset](https://github.com/rokibulroni/Phishing-Email-Dataset).
-Run `python build_realistic_dataset.py` to download the sources and produce
-a 4,000-email balanced sample at `data/realistic_phishing/realistic_emails.csv`
-(seeded, so the sample is reproducible), then evaluate it the same way:
-
-```bash
-python evaluate_dataset.py "data/realistic_phishing/realistic_emails.csv" --quiet
+```
+phishguard/
+  rules.py       what to look for: 30 rules across 12 weighted categories
+  urls.py        URL and domain inspection — spoofing, homographs, typo-squats
+  headers.py     sender-header consistency (From vs Reply-To vs display name)
+  scoring.py     combine matches into findings, a score and a risk level
+  network.py     Safe Browsing + WHOIS — the only module that touches the network
+  validation.py  is this input analysable at all
 ```
 
-Current result:
+**Rules are declarative.** Each is an id, a category, a regular expression and the
+sentence shown to the user. Adding a check is adding a row, and every rule can be
+measured on its own with `scripts/calibrate.py --rules`.
 
-- Total emails: 4,000
-- Accuracy: 51.82%
-- False positives: 52 (1.30%)
-- False negatives: 1,875 (46.88%)
-- Precision: 82.37%
-- Recall: 11.47%
-- F1 score: 20.14%
+**Categories carry the weight, not rules.** A phishing email usually repeats one
+idea several ways — "verify your account", "confirm your details", "update your
+records". Scoring each phrasing separately let a single theme dominate the score, so
+each *category* now contributes its weight at most once per email. The score
+approximates how many **independent** reasons there are to distrust a message.
 
-Interpretation: this is a much harder, more honest test than the Kaggle set,
-and the numbers are meaningfully worse — which is expected and worth stating
-plainly rather than hiding. Two things came out of building it:
+| Points | Categories |
+|---|---|
+| 3 | Credential requests · Account threats · Deceptive links · Advance-fee framing · Prize scams · Risky attachments · Sender mismatch |
+| 2 | Impersonation · Urgency · Impersonal greeting |
+| 1 | Unusual reply channel |
+| 0 | Informational (shown, never scored) |
 
-1. **A real bug it caught**: the two weakest signals in `detector.py`
-   ("contains a link" and "contains an insecure HTTP link") were originally
-   scored, and since almost every real email — mailing-list digests, tech
-   newsletters, forum threads — contains a link, this alone was enough to
-   push ordinary legitimate email over the "Suspicious" threshold. Before the
-   fix, false positives were 20.30%; after removing the score contribution
-   from those two flags (kept as informational-only messages), false
-   positives dropped to 2.50%, at the cost of recall (which had partly been
-   inflated by the same blunt "has a link" trigger rather than genuine
-   detection).
-2. **Real, low-risk recall gains**: an advance-fee ("419" scam) keyword
-   category and several account-validation phrases were added, each checked
-   against the real Enron legitimate corpus first to confirm near-zero false
-   positive rate before inclusion (see git history / `detector.py` comments
-   for the specific phrases and their measured false-positive rates).
+**Thresholds:** below 3 → Safe, 3–5 → Suspicious, 6+ → Dangerous.
 
-A third check, `sample_data/legitimate_marketing_emails.csv` (ten synthetic
-but realistic promotional emails — flash sales, trial-expiry reminders,
-policy notices), specifically targeted the concern that legitimate marketing
-copy reuses the same urgency language as phishing ("act now", "limited time
-offer", "expires today"). Initial result: 60% false positive rate, entirely
-from the generic `URGENT_KEYWORDS` category — including a literal bug where
-"no action required" matched the "action required" keyword because the
-substring-matching approach has no negation handling. Removing three
-bare/generic phrases ("immediately", "important notice", "action required")
-that had no measurable effect on the Kaggle or realistic-set true positives
-brought this down to 40%. The residual false positives ("act now" and
-"expires soon" still firing on real sales copy) are left as-is and
-documented rather than removed, since those exact phrases are also
-genuinely common phishing CTAs — this is an inherent precision/recall
-tradeoff for keyword-based urgency detection, not a bug to chase to zero.
+The Suspicious threshold being above 1 is the single most important calibration
+decision. It means one weak signal on its own — an impersonal greeting, one urgent
+phrase — is reported to the reader but is not enough to call an email phishing.
+That is what took false positives on legitimate marketing email from 40% to zero,
+and it cost about 2 points of F1 relative to the most aggressive setting. The full
+sweep is in `docs/evaluation.md`.
 
-Recall (11.47%) is still low against the realistic dataset. A meaningful
-chunk of its
-"phishing" label is generic commercial spam (pharmaceutical ads, replica
-watches, etc.) rather than credential-theft/financial-scam phishing, which is
-this project's actual scope per the user-stories backlog — so some of that
-gap reflects a scope difference (spam filtering vs. phishing detection), not
-purely a detector weakness. The honest takeaway: PhishGuard's rule-based
-approach is conservative and precision-oriented (rarely cries wolf on real
-legitimate mail) but has real recall limits against varied, real-world
-phishing it wasn't specifically tuned for — a fundamental limitation of
-fixed keyword rules versus a learned model, and explicitly out of scope for
-this project (see "Explicitly out of scope" in `CLAUDE.md`).
+### How the rules were chosen
 
-## URL threat intelligence (live app only)
+Every rule was measured against the corpora before being kept: how often it fires on
+real phishing versus real legitimate business mail. The comments in `rules.py` record
+each rule's measured rates. Two rules were measured and **rejected**, and the
+reasoning is kept in the file so it isn't rediscovered later:
 
-Beyond the offline rules, live scans in the web app also check each URL
-against:
+- *International phone/fax number* (5.8% phishing / 0.9% legitimate) — every
+  legitimate match was an ordinary European business signature. It only separated
+  the classes when narrowed to specific country dialling codes, which is geographic
+  profiling rather than phishing detection.
+- *Words spaced out to evade filters* (0.2% / 0.3%) — fired **more** often on
+  legitimate mail than phishing, so it carried no signal at all.
 
-- **Google Safe Browsing** — flags URLs on Google's known malware/phishing
-  list. Requires `SAFE_BROWSING_API_KEY`; skipped without one.
-- **WHOIS domain age** — flags domains registered in the last 30 days, a
-  common phishing indicator. No API key needed. Bounded to a 5-second
-  timeout per domain (checks at most 3 unique domains per email) so a slow
-  or unreachable WHOIS server can't hang the request.
+### What it deliberately doesn't score
 
-Both checks are best-effort: any failure (missing key, network error, WHOIS
-lookup failure) is swallowed and simply adds no flag, rather than breaking
-the scan.
+"This email contains links" and "this email contains an insecure HTTP link" are
+shown but never scored. Almost every real email contains a link; scoring these
+flagged ordinary mailing-list and newsletter mail as phishing, and was the single
+largest source of false positives in the first version (20.3% → 2.5% when removed).
 
-These checks can take a few seconds (WHOIS lookups especially), so they
-don't run inline with the scan request. The result page loads immediately
-with the offline analysis, then fetches `/history/<id>/network-check` in the
-background via JavaScript and updates the risk score/flags in place once it
-resolves — the request is only made if the email contained a URL at all.
-That endpoint (and the scan form itself) is rate-limited to 20 requests per
-minute per IP (`Flask-Limiter`) to protect the Safe Browsing quota and avoid
-hammering WHOIS servers.
+### What it can't do
+
+PhishGuard can only find what it was told to look for. A carefully written phishing
+email that avoids every phrase in the rule set will come back **Safe**. A low score
+means "nothing obvious found" — never "this email is genuine". Fixed rules will
+always lose to a learned model on novel phrasing; that trade is deliberate here
+(the rules are inspectable and explain themselves), and ML classification is
+explicitly out of scope for the project.
+
+---
+
+## Features
+
+- **Scan** — paste an email, headers optional; get a verdict, a score and grouped,
+  explained findings with advice per category.
+- **Sender-header analysis** — display name vs. real sending domain vs. Reply-To.
+  A forged email routinely disagrees with itself here; genuine mail rarely does.
+- **Live link intelligence** — Google Safe Browsing and WHOIS domain age, fetched in
+  the background after the page renders so a slow lookup never blocks the result.
+- **Scan history (full CRUD)** — every scan saved, searchable, filterable by risk
+  level, annotatable with a note, deletable, exportable as CSV or JSON.
+- **Sample emails** — four one-click examples (credential phishing, advance-fee
+  scam, mailbox-quota phishing, and a legitimate email) so the app can be
+  demonstrated without hunting for real phishing.
+- **"How it works" page** — generated from the same category registry the detector
+  scores against, so the explanation can't drift from the rules.
+- **Responsive, accessible, dark-mode UI** — no external fonts or frameworks, so it
+  works offline. The history table becomes a card stack on a phone; the risk level
+  is conveyed by word, number and meter, not colour alone.
+- **Operational bits** — `/healthz`, rate limiting, CSRF protection, friendly 404 /
+  429 / 500 pages, automatic schema migration for databases from older versions.
+
+---
+
+## Security notes
+
+- **CSRF protection** on every form (Flask-WTF). An expired token gets an
+  explanatory page rather than a bare 400.
+- **Rate limiting** — 20 requests/minute/IP on scanning and link checks, to protect
+  the Safe Browsing quota and avoid hammering WHOIS servers. Storage is in-memory,
+  which is correct for this single-process app and would need Redis behind multiple
+  workers.
+- **Stored email bodies are attacker-controlled text** and are escaped by Jinja
+  autoescaping, never rendered as markup. There's a test for it.
+- **Input is bounded** at 20,000 characters, validated before anything is analysed
+  or written to the database.
+- **No outbound calls during analysis** except the two explicit, opt-in link checks.
+
+---
 
 ## Deployment (Render)
 
-`render.yaml` deploys the app to [Render](https://render.com)'s free tier:
+`render.yaml` deploys to Render's free tier: **New → Blueprint**, connect this repo,
+deploy. `SECRET_KEY` is generated automatically; `SAFE_BROWSING_API_KEY` is declared
+but left blank.
 
-1. Push this repo to GitHub (already done if you're reading this from there).
-2. In the Render dashboard: **New > Blueprint**, connect the repo. Render
-   reads `render.yaml` and pre-fills the service (build command, start
-   command, Python version).
-3. `SECRET_KEY` is auto-generated by Render. `SAFE_BROWSING_API_KEY` is
-   listed as a required secret but left blank (`sync: false`) — set it in
-   the dashboard if you have one, or leave it empty to skip that check.
-4. Deploy. Every subsequent push to the connected branch auto-deploys.
+Two things specific to the free tier:
 
-Two things specific to the free tier worth knowing:
+- **The development server is never used in production.** Render runs
+  `gunicorn app:app`. Gunicorn lives in `requirements-render.txt` rather than
+  `requirements.txt` because it is Unix-only and would break `pip install` on the
+  Windows machine this is developed on.
+- **Scan history will not persist.** Free web services have an ephemeral filesystem,
+  so the SQLite file is lost on redeploy and on spin-down. Fine for demonstrating the
+  analysis end to end; set `PHISHGUARD_DB` to a path on a mounted disk (paid plan) or
+  swap SQLite for a hosted database if history has to survive.
 
-- **The dev server (`python app.py`) is never used in production.** Render
-  runs `gunicorn app:app` instead (see `requirements-render.txt` — gunicorn
-  is Unix-only and deliberately kept out of `requirements.txt` since it
-  can't install on Windows, which is what local development happens on here).
-- **Scan history won't persist reliably.** Render's free web services use an
-  ephemeral filesystem — SQLite data can be lost on redeploys or when the
-  service spins down from inactivity. The live demo is fine for showing the
-  analysis feature working end-to-end; don't rely on `/history` retaining
-  data long-term without upgrading to a paid plan with a persistent disk (or
-  swapping SQLite for a hosted database).
+---
+
+## Datasets and credits
+
+- **Kaggle**: [Phishing Email Dataset](https://www.kaggle.com/datasets/tommyf1/phishing-email-dataset) (MIT).
+- **Real corpora**, compiled by [rokibulroni/Phishing-Email-Dataset](https://github.com/rokibulroni/Phishing-Email-Dataset):
+  Enron-Spam (business email), CEAS 2008 Spam Challenge, Apache SpamAssassin public
+  corpus, Jose Nazario's phishing corpus, and a Nigerian advance-fee fraud corpus.
+
+`data/` is gitignored — the corpora are third-party and rebuildable with
+`python build_realistic_dataset.py`.
+
+## Further reading
+
+- [`docs/architecture.md`](docs/architecture.md) — module map and the path a scan takes
+- [`docs/evaluation.md`](docs/evaluation.md) — full benchmark methodology and results
+- [`docs/submission-checklist.md`](docs/submission-checklist.md) — course deliverables
