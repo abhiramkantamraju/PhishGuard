@@ -1,7 +1,6 @@
 # Course deliverables — IT Project IV
 
-Status of each thing the evaluator asked for. Anything marked ⚠️ needs a manual step
-that can't be done from the repository.
+Status of each thing the evaluator asked for.
 
 ## Acceptance criteria
 
@@ -10,7 +9,7 @@ that can't be done from the repository.
 | Working prototype | ✅ | `python app.py` — no API keys, no network, no database server needed |
 | Public GitHub repository | ✅ | https://github.com/abhiramkantamraju/PhishGuard |
 | Documented accuracy results against a real phishing dataset | ✅ | [`evaluation.md`](evaluation.md); reproduce with `python build_realistic_dataset.py && python evaluate_dataset.py …` |
-| Live deployed demo | ⚠️ | `render.yaml` is ready; the repo still has to be connected to a Render account once (see README → Deployment) |
+| Live deployed demo | ✅ | https://phishguard-qbkm.onrender.com — Render free tier. Spins down after 15 minutes idle, and scan history does not survive a spin-down or redeploy (see README → Deployment) |
 
 ## Feature backlog
 
@@ -51,16 +50,13 @@ Added because they materially improve the prototype, not because a story asked:
 | Per-corpus recall breakdown | `python scripts/breakdown.py` |
 | CRUD workflow evidence | `PhishGuard_CRUD_Submission.pdf` (submission documents, outside the repo) |
 | Automated-testing submission note | `PhishGuard_Automated_Tests_Submission.pdf` (ditto) |
-| Final report | `PhishGuard_Final_Report.docx` / `.pdf` (ditto) |
+| Demo video | `02_Demo.mp4`, in `BIT6_4_Practical_Project_Kamtamraju.zip` (ditto) — one continuous run covering the scan flow, persistence across a server restart, a rejected invalid submission, all four CRUD operations and `198 passed` |
+| Final report | `BIT6_4_Final_Project_Report_Kamtamraju.pdf` (ditto) |
 
-## Remaining manual steps
+## Optional extras
 
-1. **Deploy to Render** — New → Blueprint → connect the repo. Free-tier storage is
-   ephemeral, so `/history` will not retain data across redeploys; the README explains
-   the fix (`PHISHGUARD_DB` on a mounted disk).
-2. **Refresh the submission documents** with the new benchmark numbers if they are
-   resubmitted — the recall, precision and F1 figures in the final report predate the
-   scoring rework. The current numbers are in the README table and
-   [`evaluation.md`](evaluation.md).
-3. **Optionally set `SAFE_BROWSING_API_KEY`** to demonstrate the live link check.
-   Without it that one check is skipped; everything else works.
+1. **Set `SAFE_BROWSING_API_KEY`** to enable the Google Safe Browsing link check.
+   Without it that one check is skipped silently; everything else, including the WHOIS
+   domain-age check, works.
+2. **Move to a paid instance with a persistent disk** and point `PHISHGUARD_DB` at it,
+   if hosted scan history needs to survive a spin-down or redeploy.

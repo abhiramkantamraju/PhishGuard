@@ -5,6 +5,11 @@ importantly, *why*. Paste an email, get a Safe / Suspicious / Dangerous verdict,
 score, and a plain-English list of every warning sign found, grouped by what kind
 of trick it is. Every scan is saved so it can be reviewed, annotated and exported.
 
+**Live at https://phishguard-qbkm.onrender.com** — running on Render's free tier, so
+the first request after an idle period takes up to a minute while the instance wakes,
+and scan history is cleared whenever it spins down or redeploys. See
+[Deployment](#deployment-render).
+
 Built for **IT Project IV** (student: Abhiram; instructor: Dr. Denilton Luiz Darold).
 There is no machine-learning model here: the detection is a documented set of rules,
 and the accuracy claims below come with the script that reproduces them.
@@ -226,20 +231,29 @@ explicitly out of scope for the project.
 
 ## Deployment (Render)
 
-`render.yaml` deploys to Render's free tier: **New → Blueprint**, connect this repo,
-deploy. `SECRET_KEY` is generated automatically; `SAFE_BROWSING_API_KEY` is declared
-but left blank.
+Deployed at **https://phishguard-qbkm.onrender.com**, on Render's free tier in the
+Frankfurt region, building from `main`.
 
-Two things specific to the free tier:
+The service is configured with the same settings `render.yaml` describes — build
+`pip install -r requirements-render.txt`, start `gunicorn app:app`, `PYTHON_VERSION`
+3.12.7, a generated `SECRET_KEY` — so **New → Blueprint** on this repo reproduces it.
+`SAFE_BROWSING_API_KEY` is left unset, which skips that one check silently; everything
+else, including the WHOIS domain-age check, still runs.
+
+Three things specific to the free tier:
 
 - **The development server is never used in production.** Render runs
   `gunicorn app:app`. Gunicorn lives in `requirements-render.txt` rather than
   `requirements.txt` because it is Unix-only and would break `pip install` on the
   Windows machine this is developed on.
-- **Scan history will not persist.** Free web services have an ephemeral filesystem,
-  so the SQLite file is lost on redeploy and on spin-down. Fine for demonstrating the
-  analysis end to end; set `PHISHGUARD_DB` to a path on a mounted disk (paid plan) or
-  swap SQLite for a hosted database if history has to survive.
+- **The instance spins down after 15 minutes without traffic.** The next request wakes
+  it, which takes up to a minute. Nothing is wrong; it is cold-starting.
+- **Scan history does not persist.** Free web services have an ephemeral filesystem and
+  no persistent-disk option, so the SQLite file is lost on redeploy and on spin-down.
+  Fine for demonstrating the analysis end to end; set `PHISHGUARD_DB` to a path on a
+  mounted disk (paid plan) or swap SQLite for a hosted database if history has to
+  survive. Persistence itself works — it is demonstrated across a server restart on a
+  local run.
 
 ---
 
